@@ -1,0 +1,63 @@
+name: Deploy isolated SPV demo
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout validated demo source
+        uses: actions/checkout@v4
+        with:
+          repository: yannPGT/ensosp-autoevaluation-spv
+          ref: def9c952252d8d0b97b4ff588395982d3015fafd
+          path: source
+
+      - uses: actions/configure-pages@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        working-directory: source
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Typecheck demo widget
+        working-directory: source
+        run: pnpm --filter @ensosp/widget exec tsc -p tsconfig.json
+
+      - name: Run regression tests
+        working-directory: source
+        run: pnpm test -- apps/widget/src
+
+      - name: Build for isolated demo repository
+        working-directory: source/apps/widget
+        run: pnpm exec vite build --base /ensosp-autoevaluation-spv-demo/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: source/apps/widget/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
